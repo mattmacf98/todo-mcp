@@ -1,6 +1,7 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { server } from "./mcpServer";
 import express from "express";
+import { TodoLocalDB } from "./TodoLocalDB";
 
 const app = express();
 app.use(express.json());
@@ -9,6 +10,12 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "*");
   next();
+});
+
+app.get('/todos', async (req, res) => {
+  const db = new TodoLocalDB();
+  const todos = db.getTodos();
+  res.json(todos);
 });
 
 app.post('/mcp', async (req, res) => {  
