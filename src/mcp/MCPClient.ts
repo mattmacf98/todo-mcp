@@ -9,6 +9,7 @@ You are a helpful AI assistant integrated into a todo list application.
 You have access to MCP tools that let you interact with the backend and frontend of the app in real time. 
 Your goal is to help the user manage their tasks efficiently by interpreting their intent and using the available tools to take meaningful action.
 You are able to show information to the user on screen, prioritize displaying information visually over responding with text.
+Priotitize taking actions like scrolling, highlighting, filtering and ordering before getting user confirmation, they user wants to visually see the changes.
 `
 
 interface ServerConnection {
@@ -19,7 +20,7 @@ interface ServerConnection {
 
 export interface MCPPrompt {
   name: string;
-  arguments: Record<string, any>;
+  arguments?: Record<string, any>;
 }
 
 export class MCPClient {
@@ -68,7 +69,7 @@ export class MCPClient {
           const promptsRes = await client.listPrompts();
           console.log("Available prompts", promptsRes.prompts);
           prompts = promptsRes.prompts.map((prompt) => {
-            return {name: prompt.name, arguments: prompt.argsSchema as Record<string, any>};
+            return {name: prompt.name, arguments: prompt.arguments as Record<string, any>};
           });
           this.prompts.push(...prompts);
         } catch(error: any) {
@@ -106,7 +107,7 @@ export class MCPClient {
         const promptsRes = await client.listPrompts();
         console.log("Available prompts", promptsRes.prompts);
         prompts = promptsRes.prompts.map((prompt) => {
-          return {name: prompt.name, arguments: prompt.argsSchema as Record<string, any>};
+          return {name: prompt.name, arguments: prompt.arguments as Record<string, any>};
         });
         this.prompts.push(...prompts);
       } catch(error: any) {
@@ -116,12 +117,12 @@ export class MCPClient {
       this.servers[server.getName()] = {client, tools, prompts};
     }
 
-    public async callPrompt(promptName: string, args: Record<string, any>) {
+    public async callPrompt(promptName: string, args?: Record<string, any>) {
       const promptServerConnection = Object.values(this.servers).find((server) => server.prompts.some((prompt) => prompt.name === promptName));
       if (!promptServerConnection) {
           throw new Error(`Prompt ${promptName} not found in any server`);
       }
-      const promptResponse = await promptServerConnection.client.getPrompt({name: promptName});
+      const promptResponse = await promptServerConnection.client.getPrompt({name: promptName, arguments: args});
       const promptMessage = promptResponse.messages[0].content.text as string;
       console.log("Prompt message", promptMessage);
 
@@ -130,6 +131,14 @@ export class MCPClient {
 
     public getPrompts() {
       return this.prompts;
+    }
+
+    public getPromptsWithTitleArg() {
+      return this.prompts.filter((prompt) => prompt.arguments !== undefined && prompt.arguments?.findIndex((arg: any) => arg.name === "title") !== -1);
+    }
+
+    public getPromptsWithNoArgs() {
+      return this.prompts.filter((prompt) => prompt.arguments === undefined);
     }
 
     public async queryLLMWithTools(userQuery: string) {
