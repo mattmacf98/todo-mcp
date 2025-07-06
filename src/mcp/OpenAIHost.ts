@@ -1,10 +1,11 @@
 export class OpenAIHost {
-    public async sendMessage(messages: any[], tools: any[]): Promise<any> {
+    public async sendMessage(messages: any[], tools: any[], threadId?: string, langchainMetadata?: Record<string, any>): Promise<any> {
         const response = await fetch("/api/llm", {
             method: "POST",
-            body: JSON.stringify({messages, tools}),
+            body: JSON.stringify({messages, tools, threadId, langchainMetadata}),
         });
         const data = await response.json();
+        console.log("DATA", data);
         return data;
     }
 }

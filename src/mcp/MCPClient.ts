@@ -4,14 +4,6 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CodeInvocationClientTransport, CodeInvocationServerTransport, CodeMCPServer } from "./CodeInvocationTransport";
 
-const SYSTEM_PROMPT = `
-You are a helpful AI assistant integrated into a todo list application. 
-You have access to MCP tools that let you interact with the backend and frontend of the app in real time. 
-Your goal is to help the user manage their tasks efficiently by interpreting their intent and using the available tools to take meaningful action.
-You are able to show information to the user on screen, prioritize displaying information visually over responding with text.
-Priotitize taking actions like scrolling, highlighting, filtering and ordering before getting user confirmation, they user wants to visually see the changes.
-`
-
 interface ServerConnection {
   client: Client;
   tools: OpenAIMCPTool[];
@@ -29,12 +21,14 @@ export class MCPClient {
     private messages: any[];
     private tools: OpenAIMCPTool[];
     private prompts: MCPPrompt[];
+    private threadId?: string;
   
     constructor() {
       this.llm = new OpenAIHost();
-      this.messages = [{role: "system", content: SYSTEM_PROMPT}];
+      this.messages = [];
       this.tools = [];
       this.prompts = [];
+      this.threadId = undefined;
     }
 
     public async connectRemoteServer(name: string, url: string) {
@@ -117,16 +111,29 @@ export class MCPClient {
       this.servers[server.getName()] = {client, tools, prompts};
     }
 
+    private cleanPromptName(promptName: string) {
+      return promptName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
+    }
+
     public async callPrompt(promptName: string, args?: Record<string, any>) {
+      console.log("Calling prompt", promptName, args);
       const promptServerConnection = Object.values(this.servers).find((server) => server.prompts.some((prompt) => prompt.name === promptName));
       if (!promptServerConnection) {
           throw new Error(`Prompt ${promptName} not found in any server`);
       }
       const promptResponse = await promptServerConnection.client.getPrompt({name: promptName, arguments: args});
       const promptMessage = promptResponse.messages[0].content.text as string;
-      console.log("Prompt message", promptMessage);
+      console.log("Prompt response", promptResponse);
+      let langchainMetadata: Record<string, any> = {};
+      if (promptResponse.messages[0].content._meta?.treatment) {
+        langchainMetadata = {
+          [`${this.cleanPromptName(promptName)}_treatment`]: promptResponse.messages[0].content._meta.treatment
+        };
+      }
 
-      return await this.queryLLMWithTools(promptMessage);
+      console.log("Langchain metadata", langchainMetadata);
+
+      return await this.queryLLMWithTools(promptMessage, this.threadId, langchainMetadata);
     }
 
     public getPrompts() {
@@ -141,13 +148,14 @@ export class MCPClient {
       return this.prompts.filter((prompt) => prompt.arguments === undefined);
     }
 
-    public async queryLLMWithTools(userQuery: string) {
+    public async queryLLMWithTools(userQuery: string, threadId?: string, langchainMetadata?: Record<string, any>) {
         this.messages.push({role: "user", content: userQuery})
-        const response = await this.llm.sendMessage(this.messages, this.tools);
+        const response = await this.llm.sendMessage(this.messages, this.tools, threadId, langchainMetadata);
+        console.log("LLM response", response);
         return response;
     }
   
-    public async processLLMResponse(llmResponse: any): Promise<any> {
+    public async processLLMResponse(llmResponse: any, recursiveCount: number = 0): Promise<any> {
       console.log("Processing LLM response", llmResponse);
       if (llmResponse.tool_calls && llmResponse.tool_calls.length > 0) {
         for (const toolCall of llmResponse.tool_calls) {
@@ -180,15 +188,21 @@ export class MCPClient {
                     content: `Error executing tool ${name}: ${error.message}`
                 })
             }
-  
         }
 
         // Recursively process the LLM response if there are more tool calls
-        const newLLMResponse = await this.llm.sendMessage(this.messages, this.tools);
-        return this.processLLMResponse(newLLMResponse);
+        if (recursiveCount > 10) {
+          this.messages.push({
+            role: "tool",
+            content: `Exceeded max recursive calls`
+          })
+        }
+        
+        const newLLMResponse = await this.llm.sendMessage(this.messages, this.tools, this.threadId);
+        this.threadId = newLLMResponse.threadId;
+        return this.processLLMResponse(newLLMResponse, recursiveCount + 1);
       }
 
-      this.messages.push({role: "assistant", content: llmResponse.message});
       return llmResponse;
     }
   }

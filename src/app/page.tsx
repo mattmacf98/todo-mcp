@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MCPClient, MCPPrompt } from "@/mcp/MCPClient";
+import { MCPClient } from "@/mcp/MCPClient";
 import { TodoListWebComponentMCP } from "@/mcp/TodoLIstWebComponentMCP";
 
 export default function Home() {
@@ -16,8 +16,9 @@ export default function Home() {
 
   const callAI = async (userMessage: string) => {
     const response = await mcpClientRef.current!.queryLLMWithTools(userMessage);
+    console.log("RESPONSE", response);
     const processedResponse = await mcpClientRef.current!.processLLMResponse(response);
-    return processedResponse.message;
+    return processedResponse;
   }
 
   const callPrompt = async (promptName: string, args?: Record<string, any>) => {
@@ -30,8 +31,8 @@ export default function Home() {
     e.preventDefault();
     if (!mcpClientRef.current) return;
     const response = await callAI(input);
-    console.log("RESPONSE", response);
-    setChatDisplayMessages([...chatDisplayMessages, { role: "user", content: input }, { role: "assistant", content: response }]);
+    console.log("RESPONSE SEND MESSAGE", response);
+    setChatDisplayMessages([...chatDisplayMessages, { role: "user", content: input }, { role: "assistant", content: response.message, runId: response.runId }]);
     setInput("");
   };
 
@@ -63,19 +64,7 @@ export default function Home() {
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto p-6">
           {chatDisplayMessages.map((message, index) => (
-            <div 
-              key={index} 
-              className={`mb-4 p-4 rounded-lg ${
-                message.role === "assistant" 
-                  ? "bg-gray-50 mr-4" 
-                  : "bg-blue-50 ml-4"
-              }`}
-            >
-              <div className="text-sm text-gray-500 mb-1">
-                {message.role === "assistant" ? "AI Assistant" : "You"}
-              </div>
-              <div className="text-gray-800">{message.content}</div>
-            </div>
+            <ChatMessage key={index} message={message} isUser={message.role === "user"} />
           ))}
         </div>
 
@@ -114,6 +103,65 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+const ChatMessage = ({message, isUser}: {message: any, isUser: boolean}) => {
+  const [likedStatus, setLikedStatus] = useState<"like" | "dislike" | null>(null);
+
+  const handleLike = async () => {
+    console.log("LIKE", message.runId);
+    fetch("/api/rate", {
+      method: "POST",
+      body: JSON.stringify({
+        runId: message.runId,
+        score: 1.0,
+      }),
+    });
+    setLikedStatus("like");
+  }
+
+  const handleDislike = async () => {
+    console.log("DISLIKE", message.runId);
+    fetch("/api/rate", {
+      method: "POST",
+      body: JSON.stringify({
+        runId: message.runId,
+        score: 0.0,
+      }),
+    });
+    setLikedStatus("dislike");
+  }
+
+  return (
+    <div 
+      className={`mb-4 p-4 rounded-lg ${
+        isUser
+          ? "bg-gray-50 mr-4" 
+          : "bg-blue-50 ml-4"
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-500 mb-1">
+          {message.role === "assistant" ? "AI Assistant" : "You"}
+        </div>
+        {message.role === "assistant" && (
+          <div className="flex gap-2">
+            <button className={`hover:text-green-600 ${likedStatus === "like" ? "text-green-600" : "text-black"}`} onClick={handleLike}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+              </svg>
+            </button>
+            <button className={`hover:text-red-600 ${likedStatus === "dislike" ? "text-red-600" : "text-black"}`} onClick={handleDislike}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M18 9.5a1.5 1.5 0 11-3 0v-6a1.5 1.5 0 013 0v6zM14 9.667v-5.43a2 2 0 00-1.105-1.79l-.05-.025A4 4 0 0011.055 2H5.64a2 2 0 00-1.962 1.608l-1.2 6A2 2 0 004.44 12H8v4a2 2 0 002 2 1 1 0 001-1v-.667a4 4 0 01.8-2.4l1.4-1.866a4 4 0 00.8-2.4z" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="text-gray-800">{message.content}</div>
+    </div>
+  )
 }
 
 const TodoListWebComponent = ({mcpClient, handleTodoClick, handlePromptClick}: {mcpClient: MCPClient | null, handleTodoClick: (title: string, description: string) => void, handlePromptClick: (promptName: string, args?: Record<string, any>) => void}) => {
