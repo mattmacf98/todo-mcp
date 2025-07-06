@@ -3,10 +3,17 @@ import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { z } from "zod";
 import { CodeMCPServer } from "./CodeInvocationTransport";
 
+export type TodoListWebComponentMCPConfig = {
+    setStatusFilter: (status: "completed" | "incomplete" | "all") => void;
+    setSortOrder: (sortOrder: "title" | "completed" | "created" | "priority") => void;
+    scrollToTodo: (title: string) => void;
+    setHighlightedTodo: (title: string) => void;
+}
+
 export class TodoListWebComponentMCP implements CodeMCPServer {
   private server: McpServer;
 
-  constructor(setStatusFilter: (status: "completed" | "incomplete" | "all") => void, setSortOrder: (sortOrder: "title" | "completed" | "created" | "priority") => void) {
+  constructor(config: TodoListWebComponentMCPConfig) {
     this.server = new McpServer({
       name: "TodoListWebComponent",
       version: "1.0.0"
@@ -19,13 +26,41 @@ export class TodoListWebComponentMCP implements CodeMCPServer {
     });
 
     this.server.tool(
+      "scroll-to-todo",
+      "Scrolls to the todo with the given title",
+      {
+        title: z.string().describe("The title of the todo to scroll to"),
+      },
+      async ({ title }) => {
+        config.scrollToTodo(title);
+        return {
+          content: [{type: "text", text: `Todo ${title} scrolled to`}]
+        }
+      }
+    )
+
+    this.server.tool(
+      "highlight-todo",
+      "Highlights the todo with the given title",
+      {
+        title: z.string().describe("The title of the todo to highlight"),
+      },
+      async ({ title }) => {
+        config.setHighlightedTodo(title);
+        return {
+          content: [{type: "text", text: `Todo ${title} highlighted`}]
+        }
+      }
+    )
+
+    this.server.tool(
       "set-todo-status-filter",
       "Sets the filter for the todos to show on the web component",
       {
         filter: z.enum(["completed", "incomplete", "all"]).describe("The filter for the todos to show on the web component"),
       },
       async ({ filter }) => {
-        setStatusFilter(filter);
+        config.setStatusFilter(filter);
         return {
           content: [{type: "text", text: `Todo status filter set to ${filter}`}]
         }
@@ -39,7 +74,7 @@ export class TodoListWebComponentMCP implements CodeMCPServer {
         sortOrder: z.enum(["title", "completed", "created", "priority"]).describe("The sort order for the todos to show on the web component"),
       },
       async ({ sortOrder }) => {
-        setSortOrder(sortOrder);
+        config.setSortOrder(sortOrder);
         return {
           content: [{type: "text", text: `Todo sort order set to ${sortOrder}`}]
         }

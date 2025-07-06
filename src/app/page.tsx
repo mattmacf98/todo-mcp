@@ -6,7 +6,6 @@ import { TodoListWebComponentMCP } from "@/mcp/TodoLIstWebComponentMCP";
 
 export default function Home() {
   const mcpClientRef = useRef<MCPClient | null>(null);
-  const [prompts, setPrompts] = useState<MCPPrompt[]>([]);
   const [chatDisplayMessages, setChatDisplayMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
 
@@ -15,18 +14,13 @@ export default function Home() {
     mcpClientRef.current.connectRemoteServer("todo-server", "http://localhost:5000/mcp");
   }, []);
 
-  useEffect(() => {
-    if (!mcpClientRef.current) return;
-    setPrompts(mcpClientRef.current.getPrompts());
-  }, [mcpClientRef.current]);
-
   const callAI = async (userMessage: string) => {
     const response = await mcpClientRef.current!.queryLLMWithTools(userMessage);
     const processedResponse = await mcpClientRef.current!.processLLMResponse(response);
     return processedResponse.message;
   }
 
-  const callPrompt = async (promptName: string, args: Record<string, any>) => {
+  const callPrompt = async (promptName: string, args?: Record<string, any>) => {
     const response = await mcpClientRef.current!.callPrompt(promptName, args);
     const processedResponse = await mcpClientRef.current!.processLLMResponse(response);
     return processedResponse.message;
@@ -41,10 +35,19 @@ export default function Home() {
     setInput("");
   };
 
-  const handlePromptClick = async (promptName: string, args: Record<string, any>) => {
+  const handlePromptClick = async (promptName: string, args?: Record<string, any>) => {
+    console.log("PROMPT CLICKED", promptName, args);
     const response = await callPrompt(promptName, args);
     console.log("RESPONSE", response);
     setChatDisplayMessages([...chatDisplayMessages, { role: "user", content: `User clicked prompt ${promptName}` }, { role: "assistant", content: response }]);
+    setInput("");
+  }
+
+  const handleTodoClick = async (title: string, description: string) => {
+    const message = `I clicked on todo ${title} with description ${description} give me some context on what I should do to achieve this todo`;
+    const response = await callAI(message);
+    console.log("RESPONSE", response);
+    setChatDisplayMessages([...chatDisplayMessages, { role: "user", content: `User clicked todo ${title}` }, { role: "assistant", content: response }]);
     setInput("");
   }
 
@@ -52,7 +55,7 @@ export default function Home() {
     <div className="flex h-screen">
       {/* Left panel - Todo List */}
       <div className="w-2/3 border-r bg-gray-50 p-6">
-          <TodoListWebComponent mcpClient={mcpClientRef.current} />
+          <TodoListWebComponent mcpClient={mcpClientRef.current} handleTodoClick={handleTodoClick} handlePromptClick={handlePromptClick} />
       </div>
 
       {/* Right panel - Chat */}
@@ -80,11 +83,11 @@ export default function Home() {
         <div className="border-t p-4 bg-white">
           {/* Prompt buttons */}
           <div className="flex flex-wrap gap-2 mb-3">
-            {prompts.map((prompt) => (
+            {mcpClientRef.current?.getPromptsWithNoArgs().map((prompt) => (
               <button
                 key={prompt.name}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg transition-colors"
-                onClick={() => handlePromptClick(prompt.name, prompt.arguments)}
+                onClick={() => handlePromptClick(prompt.name)}
               >
                 {prompt.name}
               </button>
@@ -113,15 +116,32 @@ export default function Home() {
   );
 }
 
-const TodoListWebComponent = ({mcpClient}: {mcpClient: MCPClient | null}) => {
+const TodoListWebComponent = ({mcpClient, handleTodoClick, handlePromptClick}: {mcpClient: MCPClient | null, handleTodoClick: (title: string, description: string) => void, handlePromptClick: (promptName: string, args?: Record<string, any>) => void}) => {
   const [todos, setTodos] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<"completed" | "incomplete" | "all">("all");
   const [sortOrder, setSortOrder] = useState<"title" | "completed" | "created" | "priority">("created");
+  const [highlightedTodo, setHighlightedTodo] = useState<string | null>(null);
+
+  const scrollToTodo = (title: string) => {
+    const todoElement = document.getElementById(title);
+    if (todoElement) {
+      todoElement.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+
+  const handleTodoItemPrompClick = async (promptName: string, title: string) => {
+    await handlePromptClick(promptName, {title: title});
+  }
 
   useEffect(() => {
     if (!mcpClient) return;
     async function initServer() {
-      const server = new TodoListWebComponentMCP(setStatusFilter, setSortOrder);
+      const server = new TodoListWebComponentMCP({
+        setStatusFilter,
+        setSortOrder,
+        scrollToTodo,
+        setHighlightedTodo
+      });
       if (mcpClient) {
         await mcpClient.addCodeCallServer(server);
       }
@@ -157,10 +177,11 @@ const TodoListWebComponent = ({mcpClient}: {mcpClient: MCPClient | null}) => {
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Todo List</h1>
       <div className="max-h-[700px] overflow-y-auto">
         { sortedTodos.map((todo: any) => (
-          <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow mb-4" key={todo.title}>
+          <div className={`bg-white rounded-lg shadow-lg p-6 border ${highlightedTodo === todo.title ? 'border-blue-500 bg-blue-50' : 'border-gray-200'} hover:shadow-xl transition-shadow mb-4`}
+           key={todo.title} onClick={() => handleTodoClick(todo.title, todo.description)} id={todo.title}>
             <h2 className="text-xl font-semibold text-gray-800 mb-3">{todo.title}</h2>
             <p className="text-gray-600 mb-4 whitespace-pre-wrap">{todo.description}</p>  
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-4">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                 todo.completed 
                   ? "bg-green-100 text-green-800"
@@ -171,6 +192,39 @@ const TodoListWebComponent = ({mcpClient}: {mcpClient: MCPClient | null}) => {
               <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                 Priority: {todo.priority}
               </span>
+            </div>
+            {todo.subTasks && todo.subTasks.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Subtasks:</h3>
+                <ul className="space-y-1">
+                  {todo.subTasks.map((subtask: any) => (
+                    <li 
+                      key={subtask.title}
+                      className={`text-sm ${
+                        subtask.completed 
+                          ? "text-gray-400 line-through" 
+                          : "text-gray-600"
+                      }`}
+                    >
+                      {subtask.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex gap-2">
+              {mcpClient?.getPromptsWithTitleArg().map((prompt) => (
+                <button
+                  key={prompt.name}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleTodoItemPrompClick(prompt.name, todo.title);
+                  }}
+                >
+                  {prompt.name}
+                </button>
+              ))}
             </div>
           </div>
         ))}

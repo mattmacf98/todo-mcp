@@ -87,6 +87,72 @@ server.tool(
     }
 )
 
+server.tool(
+    "add-sub-task",
+    "Adds a sub task to a todo",
+    {
+        title: z.string().describe("The title of the todo"),
+        subTaskTitle: z.string().describe("The title of the sub task"),
+    },
+    async ({ title, subTaskTitle }) => {
+        const db = new TodoLocalDB();
+        const success = db.addSubTask(title, subTaskTitle);
+
+        if (success) {
+            return {
+                content: [{type: "text", text: `Sub task ${subTaskTitle} added to todo ${title}`}]
+            }
+        } else {
+            return {
+                content: [{type: "text", text: `No Todo with title ${title} exists`}]
+            }
+        }
+    }
+)
+
+server.tool(
+    "complete-sub-task",
+    "Completes a sub task of a todo",
+    {
+        title: z.string().describe("The title of the todo"),
+        subTaskTitle: z.string().describe("The title of the sub task"),
+    },
+    async ({ title, subTaskTitle }) => {
+        const db = new TodoLocalDB();
+        const success = db.completeSubTask(title, subTaskTitle);
+
+        if (success) {
+            return {
+                content: [{type: "text", text: `Sub task ${subTaskTitle} completed for todo ${title}`}]
+            }
+        } else {
+            return {
+                content: [{type: "text", text: `No Todo with title ${title} exists or no sub task with title ${subTaskTitle} exists`}]
+            }
+        }
+    }
+)
+
+server.registerPrompt(
+    "Break Down Todo",
+    {
+        title: "Break Down Todo",
+        description: "Breaks down a todo into sub tasks",
+        argsSchema: {
+            title: z.string().describe("The title of the todo to break down"),
+        }
+    },
+    async ({ title }) => ({
+        messages: [{
+            role: "user",
+            content: {
+                type: "text",
+                text: `Please break down the following todo into sub tasks: ${title}`
+            }
+        }]
+    })
+)
+
 server.prompt(
     "Re-prioritize Todos",
     () => ({

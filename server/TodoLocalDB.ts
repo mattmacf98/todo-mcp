@@ -5,6 +5,12 @@ export interface Todo {
     description: string;
     completed: boolean;
     priority: number;
+    subTasks: SubTask[];
+}
+
+export interface SubTask {
+    title: string;
+    completed: boolean;
 }
 
 export class TodoLocalDB {
@@ -19,7 +25,7 @@ export class TodoLocalDB {
 
     public addTodo(title: string, description: string) {
         const todos = this._loadTodos();
-        todos.push({ title, description, completed: false, priority: 10 });
+        todos.push({ title, description, completed: false, priority: 10, subTasks: [] });
         this._saveTodos(todos);
     }
 
@@ -31,6 +37,32 @@ export class TodoLocalDB {
         }
 
         todos[todoToCompleteIndex].completed = true
+        this._saveTodos(todos);
+        return true;
+    }
+
+    public addSubTask(title: string, subTaskTitle: string) {
+        const todos = this._loadTodos();
+        const todoToAddSubTaskIndex = todos.findIndex(t => t.title === title);
+        if (todoToAddSubTaskIndex === -1) {
+            return false;
+        }
+        todos[todoToAddSubTaskIndex].subTasks.push({ title: subTaskTitle, completed: false });
+        this._saveTodos(todos);
+        return true;
+    }
+
+    public completeSubTask(title: string, subTaskTitle: string) {
+        const todos = this._loadTodos();
+        const todoToCompleteSubTaskIndex = todos.findIndex(t => t.title === title);
+        if (todoToCompleteSubTaskIndex === -1) {
+            return false;
+        }
+        const subTaskToCompleteIndex = todos[todoToCompleteSubTaskIndex].subTasks.findIndex(st => st.title === subTaskTitle);
+        if (subTaskToCompleteIndex === -1) {
+            return false;
+        }
+        todos[todoToCompleteSubTaskIndex].subTasks[subTaskToCompleteIndex].completed = true;
         this._saveTodos(todos);
         return true;
     }
