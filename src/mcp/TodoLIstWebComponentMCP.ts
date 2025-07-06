@@ -6,7 +6,7 @@ import { CodeMCPServer } from "./CodeInvocationTransport";
 export class TodoListWebComponentMCP implements CodeMCPServer {
   private server: McpServer;
 
-  constructor(setStatusFilter: (status: "completed" | "incomplete" | "all") => void, setSortOrder: (sortOrder: "title" | "completed" | "created") => void) {
+  constructor(setStatusFilter: (status: "completed" | "incomplete" | "all") => void, setSortOrder: (sortOrder: "title" | "completed" | "created" | "priority") => void) {
     this.server = new McpServer({
       name: "TodoListWebComponent",
       version: "1.0.0"
@@ -36,7 +36,7 @@ export class TodoListWebComponentMCP implements CodeMCPServer {
       "set-todo-sort-order",
       "Sets the sort order for the todos to show on the web component",
       {
-        sortOrder: z.enum(["title", "completed", "created"]).describe("The sort order for the todos to show on the web component"),
+        sortOrder: z.enum(["title", "completed", "created", "priority"]).describe("The sort order for the todos to show on the web component"),
       },
       async ({ sortOrder }) => {
         setSortOrder(sortOrder);
@@ -44,6 +44,16 @@ export class TodoListWebComponentMCP implements CodeMCPServer {
           content: [{type: "text", text: `Todo sort order set to ${sortOrder}`}]
         }
       }
+    )
+
+    this.server.prompt(
+      "Focus Mode",
+      () => ({
+        messages: [{
+          role: "user",
+          content: {type: "text", text: "Enter focus mode, only show me todos that are not completed using the set-todo-status-filter tool and set the sort order to priority using the set-todo-sort-order tool"}
+        }]
+      })
     )
   }
 

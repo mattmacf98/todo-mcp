@@ -4,6 +4,7 @@ export interface Todo {
     title: string;
     description: string;
     completed: boolean;
+    priority: number;
 }
 
 export class TodoLocalDB {
@@ -18,7 +19,7 @@ export class TodoLocalDB {
 
     public addTodo(title: string, description: string) {
         const todos = this._loadTodos();
-        todos.push({ title, description, completed: false });
+        todos.push({ title, description, completed: false, priority: 10 });
         this._saveTodos(todos);
     }
 
@@ -30,6 +31,17 @@ export class TodoLocalDB {
         }
 
         todos[todoToCompleteIndex].completed = true
+        this._saveTodos(todos);
+        return true;
+    }
+
+    public setPriority(title: string, priority: number) {
+        const todos = this._loadTodos();
+        const todoToSetPriorityIndex = todos.findIndex(t => t.title === title);
+        if (todoToSetPriorityIndex === -1) {
+            return false;
+        }
+        todos[todoToSetPriorityIndex].priority = priority;
         this._saveTodos(todos);
         return true;
     }

@@ -4,9 +4,22 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CodeInvocationClientTransport, CodeInvocationServerTransport, CodeMCPServer } from "./CodeInvocationTransport";
 
+const SYSTEM_PROMPT = `
+You are a helpful AI assistant integrated into a todo list application. 
+You have access to MCP tools that let you interact with the backend and frontend of the app in real time. 
+Your goal is to help the user manage their tasks efficiently by interpreting their intent and using the available tools to take meaningful action.
+You are able to show information to the user on screen, prioritize displaying information visually over responding with text.
+`
+
 interface ServerConnection {
   client: Client;
   tools: OpenAIMCPTool[];
+  prompts: MCPPrompt[];
+}
+
+export interface MCPPrompt {
+  name: string;
+  arguments: Record<string, any>;
 }
 
 export class MCPClient {
@@ -14,11 +27,13 @@ export class MCPClient {
     private llm: OpenAIHost;
     private messages: any[];
     private tools: OpenAIMCPTool[];
+    private prompts: MCPPrompt[];
   
     constructor() {
       this.llm = new OpenAIHost();
-      this.messages = [];
+      this.messages = [{role: "system", content: SYSTEM_PROMPT}];
       this.tools = [];
+      this.prompts = [];
     }
 
     public async connectRemoteServer(name: string, url: string) {
@@ -48,7 +63,19 @@ export class MCPClient {
           console.error(`Error listing tools for server ${name}:`, error)
         }
 
-        this.servers[name] = {client, tools};
+        let prompts: MCPPrompt[] = [];
+        try {
+          const promptsRes = await client.listPrompts();
+          console.log("Available prompts", promptsRes.prompts);
+          prompts = promptsRes.prompts.map((prompt) => {
+            return {name: prompt.name, arguments: prompt.argsSchema as Record<string, any>};
+          });
+          this.prompts.push(...prompts);
+        } catch(error: any) {
+          console.warn(`Error listing prompts for server ${name}:`, error)
+        }
+
+        this.servers[name] = {client, tools, prompts};
     }
 
     public async addCodeCallServer(server: CodeMCPServer) {
@@ -71,10 +98,38 @@ export class MCPClient {
         });
         this.tools.push(...tools);
       } catch(error: any) {
-        console.error(`Error listing tools for server ${server.getName()}:`, error)
+        console.warn(`Error listing tools for server ${server.getName()}:`, error)
       }
 
-      this.servers[server.getName()] = {client, tools};
+      let prompts: MCPPrompt[] = [];
+      try {
+        const promptsRes = await client.listPrompts();
+        console.log("Available prompts", promptsRes.prompts);
+        prompts = promptsRes.prompts.map((prompt) => {
+          return {name: prompt.name, arguments: prompt.argsSchema as Record<string, any>};
+        });
+        this.prompts.push(...prompts);
+      } catch(error: any) {
+        console.warn(`Error listing prompts for server ${server.getName()}:`, error)
+      }
+
+      this.servers[server.getName()] = {client, tools, prompts};
+    }
+
+    public async callPrompt(promptName: string, args: Record<string, any>) {
+      const promptServerConnection = Object.values(this.servers).find((server) => server.prompts.some((prompt) => prompt.name === promptName));
+      if (!promptServerConnection) {
+          throw new Error(`Prompt ${promptName} not found in any server`);
+      }
+      const promptResponse = await promptServerConnection.client.getPrompt({name: promptName});
+      const promptMessage = promptResponse.messages[0].content.text as string;
+      console.log("Prompt message", promptMessage);
+
+      return await this.queryLLMWithTools(promptMessage);
+    }
+
+    public getPrompts() {
+      return this.prompts;
     }
 
     public async queryLLMWithTools(userQuery: string) {
