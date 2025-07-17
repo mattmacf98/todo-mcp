@@ -44,9 +44,14 @@ export async function POST(request: Request) {
     project_name: langsmithProject,
     id: runId
   });
-  const response = await tracedChatPipeline(body.messages, body.tools, body.threadId, body.langchainMetadata);
+
+  let threadId = body.threadId;
+  if (!threadId) {
+    threadId = uuidv4();
+  }
+  const response = await tracedChatPipeline(body.messages, body.tools, threadId, body.langchainMetadata);
   console.log("RESPONSE", response);
-  return new Response(JSON.stringify({ message: response.message.content, tool_calls: response.message.tool_calls, threadId: response.threadId, runId: runId }), {
+  return new Response(JSON.stringify({ message: response.message.content, tool_calls: response.message.tool_calls, threadId: threadId, runId: runId }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -73,7 +78,6 @@ const chatPipeline = async (messages: any[], tools: any[], threadId: string, lan
     );
     return {
       message: chatCompletion.choices[0].message,
-      tool_calls: chatCompletion.choices[0].message.tool_calls,
-      threadId: threadId
+      tool_calls: chatCompletion.choices[0].message.tool_calls
     };
 }

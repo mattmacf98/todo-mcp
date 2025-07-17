@@ -133,7 +133,7 @@ export class MCPClient {
 
       console.log("Langchain metadata", langchainMetadata);
 
-      return await this.queryLLMWithTools(promptMessage, this.threadId, langchainMetadata);
+      return await this.queryLLMWithTools(promptMessage, langchainMetadata);
     }
 
     public getPrompts() {
@@ -148,9 +148,10 @@ export class MCPClient {
       return this.prompts.filter((prompt) => prompt.arguments === undefined);
     }
 
-    public async queryLLMWithTools(userQuery: string, threadId?: string, langchainMetadata?: Record<string, any>) {
+    public async queryLLMWithTools(userQuery: string, langchainMetadata?: Record<string, any>) {
         this.messages.push({role: "user", content: userQuery})
-        const response = await this.llm.sendMessage(this.messages, this.tools, threadId, langchainMetadata);
+        const response = await this.llm.sendMessage(this.messages, this.tools, this.threadId, langchainMetadata);
+        this.threadId = response.threadId;
         console.log("LLM response", response);
         return response;
     }
@@ -202,7 +203,7 @@ export class MCPClient {
         this.threadId = newLLMResponse.threadId;
         return this.processLLMResponse(newLLMResponse, recursiveCount + 1);
       }
-
+      this.messages.push({role: "assistant", content: llmResponse.message});
       return llmResponse;
     }
   }

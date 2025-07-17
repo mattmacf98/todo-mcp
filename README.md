@@ -6,8 +6,3 @@
 6. langchain and langraph integration
 7. subtasks (break this down prompt button)
 8. task time estimates + scheduele my day
-
-
-LANGCHAIN TODOS:
-1. allow user feedback tagging
-2. run evaluation on responses
