@@ -86,7 +86,13 @@ export class TodoListWebComponentMCP implements CodeMCPServer {
       () => ({
         messages: [{
           role: "user",
-          content: {type: "text", text: "Enter focus mode, only show me todos that are not completed using the set-todo-status-filter tool and set the sort order to priority using the set-todo-sort-order tool"}
+          content: {
+            type: "text", 
+            text: "Enter focus mode, only show me todos that are not completed using the set-todo-status-filter tool and set the sort order to priority using the set-todo-sort-order tool",
+            _meta: {
+              treatment: "A"
+            }
+          }
         }]
       })
     )

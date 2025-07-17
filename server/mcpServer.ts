@@ -1,6 +1,26 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { TodoLocalDB } from "./TodoLocalDB";
+import { pull } from "langchain/hub";
+import { convertPromptToOpenAI } from "@langchain/openai";
+import dotenv from "dotenv";
+dotenv.config();
+
+
+const pullPrompt = async (promptName: string) => {
+  const pulledPrompt = await pull(promptName);
+  const systemPrompt = await pulledPrompt.invoke({});
+  return convertPromptToOpenAI(systemPrompt).messages[0];
+}
+
+let promptOptions: Record<string, any> = {};
+
+(async () => {
+    promptOptions = {
+        "A": await pullPrompt("prioritize-todos-a"),
+        "B": await pullPrompt("prioritize-todos-b")
+    }
+})()
 
 export const server = new McpServer({
     name: "todo-server",
@@ -110,6 +130,13 @@ server.tool(
     }
 )
 
+const getPrioritizePrompt = () => {
+    const treatments = ["A", "B"];
+    const randomTreatment = treatments[Math.floor(Math.random() * treatments.length)];
+    const prompt = promptOptions[randomTreatment];
+    return {text: prompt.content, _meta: {treatment: randomTreatment}};
+}
+
 server.tool(
     "complete-sub-task",
     "Completes a sub task of a todo",
@@ -159,15 +186,8 @@ server.prompt(
         messages: [{
             role: "user",
             content: {
-              type: "text",
-              text: `
-                  Please re-prioritize my todos, you may set the priority by whatever criteria you think is best.
-                  PROCESS:
-                  1. get all my todos using the get-todos tool
-                  2. once the tool returns the todos, read through the titles and descriptions of them
-                  3. for each todo, determine a priority for it relative to the other todos
-                  4. use the set-priority tool to set the priority of each todo
-              `
+                type: "text",
+                ...getPrioritizePrompt()
             }
           }]
     })
